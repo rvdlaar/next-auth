@@ -56,6 +56,13 @@ export interface EVEOnlineProfile extends Record<string, any> {
  * When creating your application, make sure to select `Authentication Only` as the connection type.
  * :::
  *
+ * :::danger
+ * `providerAccountId` is `CharacterOwnerHash`, not `CharacterID`. EVE characters can be
+ * transferred/sold; `CharacterID` stays with the character while `CharacterOwnerHash` rotates to
+ * the new owner. Using `CharacterID` would let a buyer sign into the previous owner's Auth.js
+ * account ([ESI best practices](https://docs.esi.evetech.net/docs/best_practices.html)).
+ * :::
+ *
  * :::tip
  * If using JWT for the session, you can add the `CharacterID` to the JWT and session. Example:
  * ```ts
@@ -105,8 +112,15 @@ export default function EVEOnline<P extends EVEOnlineProfile>(
     userinfo: "https://login.eveonline.com/oauth/verify",
     checks: ["state"],
     profile(profile) {
+      // CharacterOwnerHash changes when a character is transferred; CharacterID does not.
+      // See https://docs.esi.evetech.net/docs/best_practices.html
+      if (!profile.CharacterOwnerHash) {
+        throw new TypeError(
+          "EVE Online profile is missing CharacterOwnerHash; refusing to link by CharacterID"
+        )
+      }
       return {
-        id: String(profile.CharacterID),
+        id: profile.CharacterOwnerHash,
         name: profile.CharacterName,
         email: null,
         image: `https://image.eveonline.com/Character/${profile.CharacterID}_128.jpg`,
