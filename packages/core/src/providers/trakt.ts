@@ -16,7 +16,11 @@ export interface TraktUser extends Record<string, any> {
   name: string
   vip: boolean
   vip_ep: boolean
-  ids: { slug: string }
+  /**
+   * `slug` mirrors the mutable username. Prefer `uuid` from `/users/settings`
+   * as the stable account key (see https://github.com/trakt/trakt-api/issues/182).
+   */
+  ids: { slug: string; uuid: string }
   joined_at: string
   location: string | null
   about: string | null
@@ -95,20 +99,31 @@ export default function Trakt<P extends TraktUser>(
     authorization: "https://trakt.tv/oauth/authorize?scope=",
     token: "https://api.trakt.tv/oauth/token",
     userinfo: {
-      url: "https://api.trakt.tv/users/me?extended=full",
+      // `/users/settings` includes `ids.uuid`; `/users/me` only exposes mutable `ids.slug`.
+      url: "https://api.trakt.tv/users/settings",
       async request({ tokens, provider }) {
-        return await fetch(provider.userinfo?.url as URL, {
+        const data = await fetch(provider.userinfo?.url as URL, {
           headers: {
             Authorization: `Bearer ${tokens.access_token}`,
             "trakt-api-version": "2",
             "trakt-api-key": provider.clientId,
           },
         }).then(async (res) => await res.json())
+        // Settings wraps the user object; normalize so profile() receives the user.
+        return data.user ?? data
       },
     },
     profile(profile) {
+      // Trakt usernames/slugs change and can be reclaimed; uuid is the stable key.
+      // @see https://github.com/trakt/trakt-api/issues/182
+      // @see https://github.com/trakt/trakt-api/issues/214
+      if (!profile.ids?.uuid) {
+        throw new TypeError(
+          "Trakt profile response missing stable user ids.uuid"
+        )
+      }
       return {
-        id: profile.ids.slug,
+        id: profile.ids.uuid,
         name: profile.name,
         email: null, // trakt does not provide user emails
         image: profile.images.avatar.full, // trakt does not allow hotlinking

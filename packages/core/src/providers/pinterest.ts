@@ -12,6 +12,8 @@ import type { OAuthConfig, OAuthUserConfig } from "./index.js"
 
 export interface PinterestProfile extends Record<string, any> {
   account_type: "BUSINESS" | "PINNER"
+  /** Stable user account ID from GET /v5/user_account. Do not use username. */
+  id: string
   profile_image: string
   website_url: string
   username: string
@@ -90,9 +92,17 @@ export default function PinterestProvider<P extends PinterestProfile>(
     },
     token: "https://api.pinterest.com/v5/oauth/token",
     userinfo: "https://api.pinterest.com/v5/user_account",
-    profile({ username, profile_image }) {
+    profile({ id, username, profile_image }) {
+      // Pinterest usernames are changeable and re-assignable; official docs warn
+      // not to key app identity on username. Use the stable user account `id`.
+      // @see https://developers.pinterest.com/docs/key-concepts/best-practices/
+      if (!id) {
+        throw new TypeError(
+          "Pinterest profile response missing stable user account id"
+        )
+      }
       return {
-        id: username,
+        id,
         name: username,
         image: profile_image,
         email: null,
