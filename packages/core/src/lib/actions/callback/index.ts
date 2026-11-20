@@ -429,8 +429,11 @@ export async function callback(
         }
       }
 
-      // Check if user is allowed to sign in
-      await handleAuthorized({ user, account }, options)
+      // Check if user is allowed to sign in.
+      // Honor string redirects from `callbacks.signIn` the same way OAuth/email/
+      // credentials do: abort session creation and redirect instead.
+      const redirect = await handleAuthorized({ user, account }, options)
+      if (redirect) return { redirect, cookies }
 
       // Sign user in, creating them and their account if needed
       const {
